@@ -9,6 +9,7 @@ from django.views.generic import DetailView
 from django.views.generic import FormView
 from django.views.generic import TemplateView
 from django.views.generic import View
+from django.conf import settings
 
 from braces.views import CsrfExemptMixin
 from braces.views import FormValidMessageMixin
@@ -25,6 +26,7 @@ from .models import EventProcessingException
 from .settings import PLAN_LIST
 from .settings import PY3
 from .settings import User
+from .settings import plan_from_stripe_id
 from .sync import sync_customer
 
 
@@ -160,7 +162,7 @@ class SubscribeFormView(
 
     form_class = PlanForm
     template_name = "djstripe/subscribe_form.html"
-    success_url = reverse_lazy("djstripe:history")
+    success_url = reverse_lazy(settings.DJSTRIPE_REDIRECT_AFTER_SUBSCRIBED)
     form_valid_message = "You are now subscribed!"
 
     def post(self, request, *args, **kwargs):
@@ -173,7 +175,14 @@ class SubscribeFormView(
         if form.is_valid():
             try:
                 customer, created = Customer.get_or_create(self.request.user)
-                customer.update_card(self.request.POST.get("stripe_token"))
+
+                # Only send card details if needed
+                plan = plan_from_stripe_id(form.cleaned_data["plan"])
+                is_trial = 'trial_period_days' in plan and plan['trial_period_days'] > 0
+
+                if is_trial and subscription.settings.ASK_FOR_CARD_IF_SUBSCRIPTION_IS_TRIAL:
+                    customer.update_card(self.request.POST.get("stripe_token"))
+
                 customer.subscribe(form.cleaned_data["plan"])
             except stripe.StripeError as e:
                 # add form error here
@@ -192,7 +201,7 @@ class ChangePlanView(LoginRequiredMixin,
 
     form_class = PlanForm
     template_name = "djstripe/subscribe_form.html"
-    success_url = reverse_lazy("djstripe:history")
+    success_url = reverse_lazy(settings.DJSTRIPE_REDIRECT_AFTER_SUBSCRIBED)
     form_valid_message = "You've just changed your plan!"
 
     def post(self, request, *args, **kwargs):

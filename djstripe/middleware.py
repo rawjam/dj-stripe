@@ -58,10 +58,10 @@ class SubscriptionPaymentMiddleware(object):
             #       djstripe.utils.user_has_active_subscription function
             customer, created = Customer.get_or_create(request.user)
             if created:
-                return redirect("djstripe:subscribe")
+                return redirect(settings.DJSTRIPE_REDIRECT_IF_NOT_SUBSCRIBED)
 
             if not customer.has_active_subscription():
-                return redirect("djstripe:subscribe")
+                return redirect(settings.DJSTRIPE_REDIRECT_IF_NOT_SUBSCRIBED)
 
         # TODO get this working in tests
         # if request.user.is_anonymous():
