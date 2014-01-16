@@ -326,6 +326,17 @@ class Customer(StripeObject):
     def stripe_customer(self):
         return stripe.Customer.retrieve(self.stripe_id)
 
+    def apply_coupon(self, coupon_to_apply):
+        cu = self.stripe_customer
+
+        cu.coupon = coupon_to_apply
+        cu.save()
+
+        #stripe_customer = stripe.Customer.create(
+        #    email=user.email
+        #)
+        #self.sync(cu=cu)
+
     def purge(self):
         try:
             self.stripe_customer.delete()
