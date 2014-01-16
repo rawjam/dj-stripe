@@ -44,6 +44,9 @@ class SubscriptionMixin(PaymentsContextMixin):
         context = super(SubscriptionMixin, self).get_context_data(**kwargs)
         context['is_plans_plural'] = bool(len(app_settings.PLAN_CHOICES) > 1)
         context['customer'] = customer
-        context['subscription'] = customer.current_subscription if customer else None
+        try:
+            context['subscription'] = customer.current_subscription if customer else None
+        except:
+            context['subscription'] = None
         context['CurrentSubscription'] = CurrentSubscription
         return context
