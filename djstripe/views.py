@@ -3,7 +3,7 @@ import json
 
 from django.contrib import messages
 from django.core.urlresolvers import reverse_lazy
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, redirect
 from django.views.generic import DetailView
 from django.views.generic import FormView
@@ -192,6 +192,29 @@ class SubscribeFormView(
             return self.form_valid(form)
         else:
             return self.form_invalid(form)
+
+class SubscribeViaGetToPlanView(
+        LoginRequiredMixin,
+        SubscriptionMixin,
+        View):
+    # TODO - needs tests
+
+    template_name = "djstripe/subscribe_form.html"
+    success_url = settings.LOGIN_REDIRECT_URL
+
+    def get(self, request, *args, **kwargs):
+        """
+        Handles GET requests where we will subscribe the logged in user to the plan passed to the view.
+        For security measures, this will only be deemed a valid action if the user doe not yet belong to a plan
+        """
+        plan = self.kwargs['plan']
+        customer, created = Customer.get_or_create(self.request.user)
+
+        if created and not customer.has_active_subscription():
+            # We know that this was called immediately after the user signed-up, so we can safely subscribe them!
+            customer.subscribe(plan)
+
+        return HttpResponseRedirect(self.success_url)
 
 
 class ChangePlanView(LoginRequiredMixin,

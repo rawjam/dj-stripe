@@ -36,6 +36,11 @@ urlpatterns = patterns("",
         name="subscribe"
     ),
     url(
+        r"^subscribe/(?P<plan>[-\w]+)/$",
+        views.SubscribeViaGetToPlanView.as_view(),
+        name="subscribe"
+    ),
+    url(
         r"^change/plan/$",
         views.ChangePlanView.as_view(),
         name="change_plan"

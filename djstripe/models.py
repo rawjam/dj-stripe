@@ -368,9 +368,9 @@ class Customer(StripeObject):
                 "Customer does not have current subscription"
             )
         try:
-            """ 
-            If plan has trial days and customer cancels before trial period ends, 
-            then end subscription now, i.e. at_period_end=False 
+            """
+            If plan has trial days and customer cancels before trial period ends,
+            then end subscription now, i.e. at_period_end=False
             """
             if self.current_subscription.trial_end and self.current_subscription.trial_end > timezone.now():
                 at_period_end = False
@@ -512,9 +512,9 @@ class Customer(StripeObject):
                 """
                 sub_obj.trial_start = None
                 sub_obj.trial_end = None
-            
+
             sub_obj.save()
-            
+
             return sub_obj
 
     def update_plan_quantity(self, quantity, charge_immediately=False):
@@ -541,6 +541,28 @@ class Customer(StripeObject):
         defined with at_period_end=True).
         """
         if trial_days:
+
+            # Obviously if this person is upgrading or downgrading to another plan
+            # we don't want to let them take out another 30 day trial or they could
+            # simply upgrade / downgrade indefinitely without leaving a trial. So
+            # let's check for this situation!
+            try:
+                current_sub = self.current_subscription
+            except CurrentSubscription.DoesNotExist:
+                current_sub = None
+
+            if current_sub and current_sub.trial_end and current_sub.trial_end > timezone.now():
+                # Let the trial end carry over!
+                trial_end = current_sub.trial_end
+            elif not current_sub:
+                # This is their first subscription so let the trial_end be dictated by the
+                # plans default trial days value
+                trial_end = timezone.now() + datetime.timedelta(days=trial_days)
+            else:
+                # This is not the users first subscription and they have no trial days left
+                # so don't let any new trial days be set!
+                trial_end = None
+
             resp = cu.update_subscription(
                 plan=PAYMENTS_PLANS[plan]["stripe_plan_id"],
                 trial_end=timezone.now() + datetime.timedelta(days=trial_days),
@@ -632,7 +654,7 @@ class CurrentSubscription(TimeStampedModel):
     """
     def is_status_temporarily_current(self):
         return self.canceled_at and self.start < self.canceled_at and self.cancel_at_period_end
-        
+
     def is_valid(self):
         if not self.is_status_current():
             return False
@@ -753,7 +775,7 @@ class Invoice(TimeStampedModel):
         Save invoice period end assignment.
         """
         invoice.save()
-        
+
         if stripe_invoice.get("charge"):
             obj = c.record_charge(stripe_invoice["charge"])
             obj.invoice = invoice
