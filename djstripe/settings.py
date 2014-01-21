@@ -79,8 +79,9 @@ PLAN_LIST = []
 for p in PAYMENTS_PLANS:
     if PAYMENTS_PLANS[p].get("stripe_plan_id"):
         plan = PAYMENTS_PLANS[p]
-        plan['plan'] = p
-        PLAN_LIST.append(plan)
+        if 'active' not in plan or ('active' in plan and plan['active']):
+            plan['plan'] = p
+            PLAN_LIST.append(plan)
 
 if PY3:
     if isinstance(TRIAL_PERIOD_FOR_USER_CALLBACK, str):
