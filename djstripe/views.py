@@ -176,11 +176,19 @@ class SubscribeFormView(
             try:
                 customer, created = Customer.get_or_create(self.request.user)
 
+                try:
+                    current_sub = customer.current_subscription
+                    current_sub_is_active = current_sub.status == CurrentSubscription.STATUS_ACTIVE
+                except CurrentSubscription.DoesNotExist:
+                    current_sub = None
+                    current_sub_is_active = False
+
                 # Only send card details if needed
                 plan = plan_from_stripe_id(form.cleaned_data["plan"])
                 is_trial = 'trial_period_days' in plan and plan['trial_period_days'] > 0
 
-                if is_trial and subscription.settings.ASK_FOR_CARD_IF_SUBSCRIPTION_IS_TRIAL:
+                if (current_sub_is_active and not customer.can_charge()) or \
+                    (is_trial and subscription.settings.ASK_FOR_CARD_IF_SUBSCRIPTION_IS_TRIAL):
                     customer.update_card(self.request.POST.get("stripe_token"))
 
                 customer.subscribe(form.cleaned_data["plan"])
@@ -232,6 +240,27 @@ class ChangePlanView(LoginRequiredMixin,
         customer = request.user.customer
         if form.is_valid():
             try:
+                customer, created = Customer.get_or_create(self.request.user)
+
+                try:
+                    current_sub = customer.current_subscription
+                    current_sub_is_active = current_sub.status == CurrentSubscription.STATUS_ACTIVE
+                except CurrentSubscription.DoesNotExist:
+                    current_sub = None
+                    current_sub_is_active = False
+
+                # Only send card details if needed
+                plan = plan_from_stripe_id(form.cleaned_data["plan"])
+                is_trial = 'trial_period_days' in plan and plan['trial_period_days'] > 0
+
+                print "0000000"
+                print current_sub_is_active, customer.can_charge()
+
+                if (current_sub_is_active and not customer.can_charge()) or \
+                    (is_trial and subscription.settings.ASK_FOR_CARD_IF_SUBSCRIPTION_IS_TRIAL):
+                    print "-------"
+                    customer.update_card(self.request.POST.get("stripe_token"))
+
                 customer.subscribe(form.cleaned_data["plan"])
             except stripe.StripeError as e:
                 self.error = e.message
