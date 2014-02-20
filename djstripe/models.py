@@ -564,22 +564,17 @@ class Customer(StripeObject):
                 current_sub = None
                 current_sub_is_active = False
 
-            print current_sub, current_sub_is_active
-
             if current_sub and not current_sub_is_active and current_sub.trial_end and current_sub.trial_end > timezone.now():
                 # Let the trial end carry over!
                 trial_end = current_sub.trial_end
-                print "1"
             elif not current_sub:
                 # This is their first subscription so let the trial_end be dictated by the
                 # plans default trial days value
                 trial_end = timezone.now() + datetime.timedelta(days=trial_days)
-                print "2"
             else:
                 # This is not the users first subscription and they have no trial days left
                 # so don't let any new trial days be set!
                 trial_end = None
-                print "3"
 
             resp = cu.update_subscription(
                 plan=PAYMENTS_PLANS[plan]["stripe_plan_id"],
