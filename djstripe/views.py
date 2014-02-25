@@ -253,12 +253,8 @@ class ChangePlanView(LoginRequiredMixin,
                 plan = plan_from_stripe_id(form.cleaned_data["plan"])
                 is_trial = 'trial_period_days' in plan and plan['trial_period_days'] > 0
 
-                print "0000000"
-                print current_sub_is_active, customer.can_charge()
-
                 if (current_sub_is_active and not customer.can_charge()) or \
                     (is_trial and subscription.settings.ASK_FOR_CARD_IF_SUBSCRIPTION_IS_TRIAL):
-                    print "-------"
                     customer.update_card(self.request.POST.get("stripe_token"))
 
                 customer.subscribe(form.cleaned_data["plan"])
