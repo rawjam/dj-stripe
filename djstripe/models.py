@@ -525,7 +525,7 @@ class Customer(StripeObject):
                 sub_obj.trial_end = None
 
             # Are there any discounts active on this account?
-            if message['discount']:
+            if message and message['discount']:
                 coupon = message['discount']['coupon']
                 if coupon['valid']:
                     sub_obj.discount_amount = coupon['amount_off']
