@@ -196,7 +196,7 @@ class Event(StripeObject):
                     if not self.customer:
                         self.link_customer()
                     if self.customer:
-                        self.customer.sync_current_subscription()
+                        self.customer.sync_current_subscription(message=self.message["data"]["object"])
                 elif self.kind == "customer.deleted":
                     if not self.customer:
                         self.link_customer()
@@ -476,7 +476,7 @@ class Customer(StripeObject):
         for charge in cu.charges(**kwargs).data:
             self.record_charge(charge.id)
 
-    def sync_current_subscription(self, cu=None):
+    def sync_current_subscription(self, cu=None, message=None):
         cu = cu or self.stripe_customer
         sub = cu.subscription
         if sub:
@@ -523,6 +523,16 @@ class Customer(StripeObject):
                 """
                 sub_obj.trial_start = None
                 sub_obj.trial_end = None
+
+            # Are there any discounts active on this account?
+            if message['discount']:
+                coupon = message['discount']['coupon']
+                if coupon['valid']:
+                    sub_obj.discount_amount = coupon['amount_off']
+                    sub_obj.discount_percentage = coupon['percent_off']
+                else:
+                    sub_obj.discount_amount = None
+                    sub_obj.discount_percentage = None
 
             sub_obj.save()
 
@@ -646,6 +656,21 @@ class CurrentSubscription(TimeStampedModel):
     trial_end = models.DateTimeField(null=True, blank=True)
     trial_start = models.DateTimeField(null=True, blank=True)
     amount = models.DecimalField(decimal_places=2, max_digits=7)
+
+    discount_amount = models.DecimalField(decimal_places=2, max_digits=7, null=True, blank=True)
+    discount_percentage = models.IntegerField(null=True, blank=True)
+
+    def has_discount(self):
+        return self.discount_amount or self.discount_percentage
+
+    def discounted_amount(self):
+        if self.has_discount():
+            if self.discount_amount:
+                return self.amount - self.discount_amount
+            elif self.discount_percentage:
+                amount_to_discount = (self.amount*self.discount_percentage)/100
+                return self.amount - amount_to_discount
+        return self.amount
 
     def plan_display(self):
         return PAYMENTS_PLANS[self.plan]["name"]
