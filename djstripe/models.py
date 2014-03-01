@@ -669,7 +669,7 @@ class CurrentSubscription(TimeStampedModel):
     def discounted_amount(self):
         if self.has_discount():
             if self.discount_amount:
-                return self.amount - self.discount_amount
+                return self.amount - (self.discount_amount/100)
             elif self.discount_percentage:
                 amount_to_discount = (self.amount*self.discount_percentage)/100
                 return self.amount - amount_to_discount
