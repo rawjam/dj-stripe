@@ -196,7 +196,7 @@ class Event(StripeObject):
                     if not self.customer:
                         self.link_customer()
                     if self.customer:
-                        self.customer.sync_current_subscription(message=self.message["data"]["object"])
+                        self.customer.sync_current_subscription()
                 elif self.kind == "customer.deleted":
                     if not self.customer:
                         self.link_customer()
@@ -476,7 +476,7 @@ class Customer(StripeObject):
         for charge in cu.charges(**kwargs).data:
             self.record_charge(charge.id)
 
-    def sync_current_subscription(self, cu=None, message=None):
+    def sync_current_subscription(self, cu=None):
         cu = cu or self.stripe_customer
         sub = cu.subscription
         if sub:
@@ -525,11 +525,11 @@ class Customer(StripeObject):
                 sub_obj.trial_end = None
 
             # Are there any discounts active on this account?
-            if message and message['discount']:
-                coupon = message['discount']['coupon']
-                if coupon['valid']:
-                    sub_obj.discount_amount = coupon['amount_off']
-                    sub_obj.discount_percentage = coupon['percent_off']
+            if sub.discount:
+                coupon = sub.discount.coupon
+                if coupon.valid:
+                    sub_obj.discount_amount = coupon.amount_off
+                    sub_obj.discount_percentage = coupon.percent_off
                 else:
                     sub_obj.discount_amount = None
                     sub_obj.discount_percentage = None
@@ -661,7 +661,10 @@ class CurrentSubscription(TimeStampedModel):
     discount_percentage = models.IntegerField(null=True, blank=True)
 
     def has_discount(self):
-        return self.discount_amount or self.discount_percentage
+        if self.discount_amount or self.discount_percentage:
+            return True
+        else:
+            return False
 
     def discounted_amount(self):
         if self.has_discount():
