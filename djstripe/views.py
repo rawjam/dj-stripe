@@ -26,6 +26,7 @@ from .models import EventProcessingException
 from .settings import PLAN_LIST
 from .settings import PY3
 from .settings import User
+from .settings import ASK_FOR_CARD_IF_SUBSCRIPTION_IS_TRIAL
 from .settings import plan_from_stripe_id
 from .sync import sync_customer
 
@@ -184,11 +185,12 @@ class SubscribeFormView(
                     current_sub_is_trialing = False
 
                 # Only send card details if needed
-                plan = plan_from_stripe_id(form.cleaned_data["plan"])
+                plan = settings.DJSTRIPE_PLANS[form.cleaned_data["plan"]]
                 is_trial = 'trial_period_days' in plan and plan['trial_period_days'] > 0
+                has_cost = plan['price'] > 0 if 'price' in plan else False
 
-                if (not current_sub_is_trialing and not customer.can_charge()) or \
-                    (is_trial and subscription.settings.ASK_FOR_CARD_IF_SUBSCRIPTION_IS_TRIAL):
+                if (not current_sub_is_trialing and not customer.can_charge() and has_cost) or \
+                    (is_trial and ASK_FOR_CARD_IF_SUBSCRIPTION_IS_TRIAL):
                     customer.update_card(self.request.POST.get("stripe_token"))
 
                 customer.subscribe(form.cleaned_data["plan"])
@@ -250,11 +252,12 @@ class ChangePlanView(LoginRequiredMixin,
                     current_sub_is_trialing = False
 
                 # Only send card details if needed
-                plan = plan_from_stripe_id(form.cleaned_data["plan"])
+                plan = settings.DJSTRIPE_PLANS[form.cleaned_data["plan"]]
                 is_trial = 'trial_period_days' in plan and plan['trial_period_days'] > 0
+                has_cost = plan['price'] > 0 if 'price' in plan else False
 
-                if (not current_sub_is_trialing and not customer.can_charge()) or \
-                    (is_trial and subscription.settings.ASK_FOR_CARD_IF_SUBSCRIPTION_IS_TRIAL):
+                if (not current_sub_is_trialing and not customer.can_charge() and has_cost) or \
+                    (is_trial and ASK_FOR_CARD_IF_SUBSCRIPTION_IS_TRIAL):
                     customer.update_card(self.request.POST.get("stripe_token"))
 
                 customer.subscribe(form.cleaned_data["plan"])
