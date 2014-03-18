@@ -142,6 +142,7 @@ class AccountView(LoginRequiredMixin, SelectRelatedMixin, TemplateView):
     def get_context_data(self, *args, **kwargs):
         context = super(AccountView, self).get_context_data(**kwargs)
         customer, created = Customer.get_or_create(self.request.user)
+        customer.sync_current_subscription()
         context['customer'] = customer
         try:
             context['subscription'] = customer.current_subscription

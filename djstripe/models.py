@@ -536,6 +536,10 @@ class Customer(StripeObject):
 
             sub_obj.save()
 
+            # Just in case, trigger the sub updated signal
+            signal = WEBHOOK_SIGNALS.get('customer.subscription.updated')
+            signal.send(sender=Customer, event=self)
+            
             return sub_obj
 
     def update_plan_quantity(self, quantity, charge_immediately=False):
