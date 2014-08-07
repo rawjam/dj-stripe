@@ -40,7 +40,7 @@ class SubscriptionPaymentMiddleware(object):
 
     def process_request(self, request):
 
-        if request.user.is_authenticated() and not request.user.is_staff:
+        if request.user.is_authenticated() and not request.user.is_staff and not request.path.startswith('/media/') and not request.path.startswith('/static/'):
             match = resolve(request.path)
             if "({0})".format(match.app_name) in EXEMPT:
                 return
