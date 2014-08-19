@@ -481,20 +481,25 @@ class Customer(StripeObject):
         sub = cu.subscription
         if sub:
             try:
-                sub_obj = self.current_subscription
-                sub_obj.plan = plan_from_stripe_id(sub.plan.id)
-                sub_obj.current_period_start = convert_tstamp(
-                    sub.current_period_start
-                )
-                sub_obj.current_period_end = convert_tstamp(
-                    sub.current_period_end
-                )
-                sub_obj.amount = (sub.plan.amount / decimal.Decimal("100"))
-                sub_obj.status = sub.status
-                sub_obj.cancel_at_period_end = sub.cancel_at_period_end
-                sub_obj.start = convert_tstamp(sub.start)
-                sub_obj.quantity = sub.quantity
-                sub_obj.save()
+                plan = plan_from_stripe_id(sub.plan.id)
+
+                if plan:
+                    sub_obj = self.current_subscription
+                    sub_obj.plan = plan
+                    sub_obj.current_period_start = convert_tstamp(
+                        sub.current_period_start
+                    )
+                    sub_obj.current_period_end = convert_tstamp(
+                        sub.current_period_end
+                    )
+                    sub_obj.amount = (sub.plan.amount / decimal.Decimal("100"))
+                    sub_obj.status = sub.status
+                    sub_obj.cancel_at_period_end = sub.cancel_at_period_end
+                    sub_obj.start = convert_tstamp(sub.start)
+                    sub_obj.quantity = sub.quantity
+                    sub_obj.save()
+                else:
+                    sub_obj = None
             except CurrentSubscription.DoesNotExist:
                 sub_obj = CurrentSubscription.objects.create(
                     customer=self,
@@ -512,34 +517,35 @@ class Customer(StripeObject):
                     quantity=sub.quantity
                 )
 
-            if sub.trial_start and sub.trial_end:
-                sub_obj.trial_start = convert_tstamp(sub.trial_start)
-                sub_obj.trial_end = convert_tstamp(sub.trial_end)
-            else:
-                """
-                Avoids keeping old values for trial_start and trial_end
-                for cases where customer had a subscription with trial days
-                then one without that (s)he cancels.
-                """
-                sub_obj.trial_start = None
-                sub_obj.trial_end = None
-
-            # Are there any discounts active on this account?
-            if sub.discount:
-                coupon = sub.discount.coupon
-                if coupon.valid:
-                    sub_obj.discount_amount = coupon.amount_off
-                    sub_obj.discount_percentage = coupon.percent_off
+            if sub_obj:
+                if sub.trial_start and sub.trial_end:
+                    sub_obj.trial_start = convert_tstamp(sub.trial_start)
+                    sub_obj.trial_end = convert_tstamp(sub.trial_end)
                 else:
-                    sub_obj.discount_amount = None
-                    sub_obj.discount_percentage = None
+                    """
+                    Avoids keeping old values for trial_start and trial_end
+                    for cases where customer had a subscription with trial days
+                    then one without that (s)he cancels.
+                    """
+                    sub_obj.trial_start = None
+                    sub_obj.trial_end = None
 
-            sub_obj.save()
+                # Are there any discounts active on this account?
+                if sub.discount:
+                    coupon = sub.discount.coupon
+                    if coupon.valid:
+                        sub_obj.discount_amount = coupon.amount_off
+                        sub_obj.discount_percentage = coupon.percent_off
+                    else:
+                        sub_obj.discount_amount = None
+                        sub_obj.discount_percentage = None
 
-            # Just in case, trigger the sub updated signal
-            signal = WEBHOOK_SIGNALS.get('customer.subscription.updated')
-            signal.send(sender=Customer, event=self)
-            
+                sub_obj.save()
+
+                # Just in case, trigger the sub updated signal
+                signal = WEBHOOK_SIGNALS.get('customer.subscription.updated')
+                signal.send(sender=Customer, event=self)
+
             return sub_obj
 
     def update_plan_quantity(self, quantity, charge_immediately=False):
@@ -680,7 +686,10 @@ class CurrentSubscription(TimeStampedModel):
         return self.amount
 
     def plan_display(self):
-        return PAYMENTS_PLANS[self.plan]["name"]
+        try:
+            return PAYMENTS_PLANS[self.plan]["name"]
+        except KeyError:
+            return None
 
     def status_display(self):
         return self.status.replace("_", " ").title()
