@@ -481,11 +481,11 @@ class Customer(StripeObject):
         sub = cu.subscription
         if sub:
             try:
-                plan = plan_from_stripe_id(sub.plan.id)
+                sub_obj = self.current_subscription
+                sub_obj.plan = plan_from_stripe_id(sub.plan.id)
 
-                if plan:
-                    sub_obj = self.current_subscription
-                    sub_obj.plan = plan
+                # Its possible theyre on a plan that has since been removed
+                if sub_obj.plan:
                     sub_obj.current_period_start = convert_tstamp(
                         sub.current_period_start
                     )
@@ -500,6 +500,7 @@ class Customer(StripeObject):
                     sub_obj.save()
                 else:
                     sub_obj = None
+
             except CurrentSubscription.DoesNotExist:
                 sub_obj = CurrentSubscription.objects.create(
                     customer=self,
@@ -517,7 +518,8 @@ class Customer(StripeObject):
                     quantity=sub.quantity
                 )
 
-            if sub_obj:
+            # Its possible theyre on a plan that has since been removed
+            if sub_obj.plan:
                 if sub.trial_start and sub.trial_end:
                     sub_obj.trial_start = convert_tstamp(sub.trial_start)
                     sub_obj.trial_end = convert_tstamp(sub.trial_end)
@@ -539,7 +541,6 @@ class Customer(StripeObject):
                     else:
                         sub_obj.discount_amount = None
                         sub_obj.discount_percentage = None
-
                 sub_obj.save()
 
                 # Just in case, trigger the sub updated signal
@@ -558,14 +559,14 @@ class Customer(StripeObject):
         )
 
     def subscribe(self, plan, quantity=1, trial_days=None,
-                  charge_immediately=True):
+                  charge_immediately=True, always_allow_trial=False):
         cu = self.stripe_customer
         """
         Trial_days corresponds to the value specified by the selected plan
         for the key trial_period_days.
         """
-        if ("trial_period_days" in PAYMENTS_PLANS[plan]):
-            trial_days=PAYMENTS_PLANS[plan]["trial_period_days"]
+        if not trial_days and "trial_period_days" in PAYMENTS_PLANS[plan]:
+            trial_days = PAYMENTS_PLANS[plan]["trial_period_days"]
         """
         The subscription is defined with prorate=False to make the subscription
         end behavior of Change plan consistent with the one of Cancel subscription (which is
@@ -584,10 +585,10 @@ class Customer(StripeObject):
                 current_sub = None
                 current_sub_is_active = False
 
-            if current_sub and not current_sub_is_active and current_sub.trial_end and current_sub.trial_end > timezone.now():
+            if current_sub and not current_sub_is_active and current_sub.trial_end and current_sub.trial_end > timezone.now() and not always_allow_trial:
                 # Let the trial end carry over!
                 trial_end = current_sub.trial_end
-            elif not current_sub:
+            elif not current_sub or always_allow_trial:
                 # This is their first subscription so let the trial_end be dictated by the
                 # plans default trial days value
                 trial_end = timezone.now() + datetime.timedelta(days=trial_days)
