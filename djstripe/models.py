@@ -483,18 +483,21 @@ class Customer(StripeObject):
             try:
                 sub_obj = self.current_subscription
                 sub_obj.plan = plan_from_stripe_id(sub.plan.id)
-                sub_obj.current_period_start = convert_tstamp(
-                    sub.current_period_start
-                )
-                sub_obj.current_period_end = convert_tstamp(
-                    sub.current_period_end
-                )
-                sub_obj.amount = (sub.plan.amount / decimal.Decimal("100"))
-                sub_obj.status = sub.status
-                sub_obj.cancel_at_period_end = sub.cancel_at_period_end
-                sub_obj.start = convert_tstamp(sub.start)
-                sub_obj.quantity = sub.quantity
-                sub_obj.save()
+
+                # Its possible theyre on a plan that has since been removed
+                if sub_obj.plan:
+                    sub_obj.current_period_start = convert_tstamp(
+                        sub.current_period_start
+                    )
+                    sub_obj.current_period_end = convert_tstamp(
+                        sub.current_period_end
+                    )
+                    sub_obj.amount = (sub.plan.amount / decimal.Decimal("100"))
+                    sub_obj.status = sub.status
+                    sub_obj.cancel_at_period_end = sub.cancel_at_period_end
+                    sub_obj.start = convert_tstamp(sub.start)
+                    sub_obj.quantity = sub.quantity
+                    sub_obj.save()
             except CurrentSubscription.DoesNotExist:
                 sub_obj = CurrentSubscription.objects.create(
                     customer=self,
@@ -512,34 +515,36 @@ class Customer(StripeObject):
                     quantity=sub.quantity
                 )
 
-            if sub.trial_start and sub.trial_end:
-                sub_obj.trial_start = convert_tstamp(sub.trial_start)
-                sub_obj.trial_end = convert_tstamp(sub.trial_end)
-            else:
-                """
-                Avoids keeping old values for trial_start and trial_end
-                for cases where customer had a subscription with trial days
-                then one without that (s)he cancels.
-                """
-                sub_obj.trial_start = None
-                sub_obj.trial_end = None
-
-            # Are there any discounts active on this account?
-            if sub.discount:
-                coupon = sub.discount.coupon
-                if coupon.valid:
-                    sub_obj.discount_amount = coupon.amount_off
-                    sub_obj.discount_percentage = coupon.percent_off
+            # Its possible theyre on a plan that has since been removed
+            if sub_obj.plan:
+                if sub.trial_start and sub.trial_end:
+                    sub_obj.trial_start = convert_tstamp(sub.trial_start)
+                    sub_obj.trial_end = convert_tstamp(sub.trial_end)
                 else:
-                    sub_obj.discount_amount = None
-                    sub_obj.discount_percentage = None
+                    """
+                    Avoids keeping old values for trial_start and trial_end
+                    for cases where customer had a subscription with trial days
+                    then one without that (s)he cancels.
+                    """
+                    sub_obj.trial_start = None
+                    sub_obj.trial_end = None
 
-            sub_obj.save()
+                # Are there any discounts active on this account?
+                if sub.discount:
+                    coupon = sub.discount.coupon
+                    if coupon.valid:
+                        sub_obj.discount_amount = coupon.amount_off
+                        sub_obj.discount_percentage = coupon.percent_off
+                    else:
+                        sub_obj.discount_amount = None
+                        sub_obj.discount_percentage = None
 
-            # Just in case, trigger the sub updated signal
-            signal = WEBHOOK_SIGNALS.get('customer.subscription.updated')
-            signal.send(sender=Customer, event=self)
-            
+                sub_obj.save()
+
+                # Just in case, trigger the sub updated signal
+                signal = WEBHOOK_SIGNALS.get('customer.subscription.updated')
+                signal.send(sender=Customer, event=self)
+
             return sub_obj
 
     def update_plan_quantity(self, quantity, charge_immediately=False):
@@ -552,14 +557,14 @@ class Customer(StripeObject):
         )
 
     def subscribe(self, plan, quantity=1, trial_days=None,
-                  charge_immediately=True):
+                  charge_immediately=True, always_allow_trial=False):
         cu = self.stripe_customer
         """
         Trial_days corresponds to the value specified by the selected plan
         for the key trial_period_days.
         """
-        if ("trial_period_days" in PAYMENTS_PLANS[plan]):
-            trial_days=PAYMENTS_PLANS[plan]["trial_period_days"]
+        if not trial_days and "trial_period_days" in PAYMENTS_PLANS[plan]:
+            trial_days = PAYMENTS_PLANS[plan]["trial_period_days"]
         """
         The subscription is defined with prorate=False to make the subscription
         end behavior of Change plan consistent with the one of Cancel subscription (which is
@@ -578,10 +583,10 @@ class Customer(StripeObject):
                 current_sub = None
                 current_sub_is_active = False
 
-            if current_sub and not current_sub_is_active and current_sub.trial_end and current_sub.trial_end > timezone.now():
+            if current_sub and not current_sub_is_active and current_sub.trial_end and current_sub.trial_end > timezone.now() and not always_allow_trial:
                 # Let the trial end carry over!
                 trial_end = current_sub.trial_end
-            elif not current_sub:
+            elif not current_sub or always_allow_trial:
                 # This is their first subscription so let the trial_end be dictated by the
                 # plans default trial days value
                 trial_end = timezone.now() + datetime.timedelta(days=trial_days)
