@@ -938,7 +938,7 @@ class Charge(StripeObject):
         return obj
 
     def send_receipt(self):
-        if not self.receipt_sent:
+        if not self.receipt_sent and getattr(settings, "DJSTRIPE_SEND_RECEIPTS", False):
             site = Site.objects.get_current()
             protocol = getattr(settings, "DEFAULT_HTTP_PROTOCOL", "http")
             ctx = {
