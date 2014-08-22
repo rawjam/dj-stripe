@@ -519,7 +519,7 @@ class Customer(StripeObject):
                 )
 
             # Its possible theyre on a plan that has since been removed
-            if sub_obj.plan:
+            if sub_obj and sub_obj.plan:
                 if sub.trial_start and sub.trial_end:
                     sub_obj.trial_start = convert_tstamp(sub.trial_start)
                     sub_obj.trial_end = convert_tstamp(sub.trial_end)
@@ -797,6 +797,8 @@ class Invoice(TimeStampedModel):
 
             if item.get("plan"):
                 plan = plan_from_stripe_id(item["plan"]["id"])
+                if not plan:
+                    plan = ""
             else:
                 plan = ""
 
