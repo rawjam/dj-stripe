@@ -755,92 +755,97 @@ class Invoice(TimeStampedModel):
 
     @classmethod
     def sync_from_stripe_data(cls, stripe_invoice, send_receipt=True):
-        c = Customer.objects.get(stripe_id=stripe_invoice["customer"])
-        period_end = convert_tstamp(stripe_invoice, "period_end")
-        period_start = convert_tstamp(stripe_invoice, "period_start")
-        date = convert_tstamp(stripe_invoice, "date")
+        try:
+            c = Customer.objects.get(stripe_id=stripe_invoice["customer"])
+        except Customer.DoesNotExist:
+            c = None
 
-        invoice, created = cls.objects.get_or_create(
-            stripe_id=stripe_invoice["id"],
-            defaults=dict(
-                customer=c,
-                attempted=stripe_invoice["attempted"],
-                closed=stripe_invoice["closed"],
-                paid=stripe_invoice["paid"],
-                period_end=period_end,
-                period_start=period_start,
-                subtotal=stripe_invoice["subtotal"] / decimal.Decimal("100"),
-                total=stripe_invoice["total"] / decimal.Decimal("100"),
-                date=date,
-                charge=stripe_invoice.get("charge") or ""
-            )
-        )
-        if not created:
-            # pylint: disable=C0301
-            invoice.attempted = stripe_invoice["attempted"]
-            invoice.closed = stripe_invoice["closed"]
-            invoice.paid = stripe_invoice["paid"]
-            invoice.period_end = period_end
-            invoice.period_start = period_start
-            invoice.subtotal = stripe_invoice["subtotal"] / decimal.Decimal("100")
-            invoice.total = stripe_invoice["total"] / decimal.Decimal("100")
-            invoice.date = date
-            invoice.charge = stripe_invoice.get("charge") or ""
-            invoice.save()
+        if c:
+            period_end = convert_tstamp(stripe_invoice, "period_end")
+            period_start = convert_tstamp(stripe_invoice, "period_start")
+            date = convert_tstamp(stripe_invoice, "date")
 
-        for item in stripe_invoice["lines"].get("data", []):
-            period_end = convert_tstamp(item["period"], "end")
-            period_start = convert_tstamp(item["period"], "start")
-            """
-            Period end of invoice is the period end of the latest invoiceitem.
-            """
-            invoice.period_end = period_end
-
-            if item.get("plan"):
-                plan = plan_from_stripe_id(item["plan"]["id"])
-                if not plan:
-                    plan = ""
-            else:
-                plan = ""
-
-            inv_item, inv_item_created = invoice.items.get_or_create(
-                stripe_id=item["id"],
+            invoice, created = cls.objects.get_or_create(
+                stripe_id=stripe_invoice["id"],
                 defaults=dict(
-                    amount=(item["amount"] / decimal.Decimal("100")),
-                    currency=item["currency"],
-                    proration=item["proration"],
-                    description=item.get("description") or "",
-                    line_type=item["type"],
-                    plan=plan,
-                    period_start=period_start,
+                    customer=c,
+                    attempted=stripe_invoice["attempted"],
+                    closed=stripe_invoice["closed"],
+                    paid=stripe_invoice["paid"],
                     period_end=period_end,
-                    quantity=item.get("quantity")
+                    period_start=period_start,
+                    subtotal=stripe_invoice["subtotal"] / decimal.Decimal("100"),
+                    total=stripe_invoice["total"] / decimal.Decimal("100"),
+                    date=date,
+                    charge=stripe_invoice.get("charge") or ""
                 )
             )
-            if not inv_item_created:
-                inv_item.amount = (item["amount"] / decimal.Decimal("100"))
-                inv_item.currency = item["currency"]
-                inv_item.proration = item["proration"]
-                inv_item.description = item.get("description") or ""
-                inv_item.line_type = item["type"]
-                inv_item.plan = plan
-                inv_item.period_start = period_start
-                inv_item.period_end = period_end
-                inv_item.quantity = item.get("quantity")
-                inv_item.save()
+            if not created:
+                # pylint: disable=C0301
+                invoice.attempted = stripe_invoice["attempted"]
+                invoice.closed = stripe_invoice["closed"]
+                invoice.paid = stripe_invoice["paid"]
+                invoice.period_end = period_end
+                invoice.period_start = period_start
+                invoice.subtotal = stripe_invoice["subtotal"] / decimal.Decimal("100")
+                invoice.total = stripe_invoice["total"] / decimal.Decimal("100")
+                invoice.date = date
+                invoice.charge = stripe_invoice.get("charge") or ""
+                invoice.save()
 
-        """
-        Save invoice period end assignment.
-        """
-        invoice.save()
+            for item in stripe_invoice["lines"].get("data", []):
+                period_end = convert_tstamp(item["period"], "end")
+                period_start = convert_tstamp(item["period"], "start")
+                """
+                Period end of invoice is the period end of the latest invoiceitem.
+                """
+                invoice.period_end = period_end
 
-        if stripe_invoice.get("charge"):
-            obj = c.record_charge(stripe_invoice["charge"])
-            obj.invoice = invoice
-            obj.save()
-            if send_receipt:
-                obj.send_receipt()
-        return invoice
+                if item.get("plan"):
+                    plan = plan_from_stripe_id(item["plan"]["id"])
+                    if not plan:
+                        plan = ""
+                else:
+                    plan = ""
+
+                inv_item, inv_item_created = invoice.items.get_or_create(
+                    stripe_id=item["id"],
+                    defaults=dict(
+                        amount=(item["amount"] / decimal.Decimal("100")),
+                        currency=item["currency"],
+                        proration=item["proration"],
+                        description=item.get("description") or "",
+                        line_type=item["type"],
+                        plan=plan,
+                        period_start=period_start,
+                        period_end=period_end,
+                        quantity=item.get("quantity")
+                    )
+                )
+                if not inv_item_created:
+                    inv_item.amount = (item["amount"] / decimal.Decimal("100"))
+                    inv_item.currency = item["currency"]
+                    inv_item.proration = item["proration"]
+                    inv_item.description = item.get("description") or ""
+                    inv_item.line_type = item["type"]
+                    inv_item.plan = plan
+                    inv_item.period_start = period_start
+                    inv_item.period_end = period_end
+                    inv_item.quantity = item.get("quantity")
+                    inv_item.save()
+
+            """
+            Save invoice period end assignment.
+            """
+            invoice.save()
+
+            if stripe_invoice.get("charge"):
+                obj = c.record_charge(stripe_invoice["charge"])
+                obj.invoice = invoice
+                obj.save()
+                if send_receipt:
+                    obj.send_receipt()
+            return invoice
 
     @classmethod
     def handle_event(cls, event):
