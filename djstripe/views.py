@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 import json
 
+from django.contrib.auth.models import User
 from django.contrib import messages
 from django.core.urlresolvers import reverse_lazy
 from django.http import HttpResponse, HttpResponseRedirect
@@ -25,7 +26,6 @@ from .models import Event
 from .models import EventProcessingException
 from .settings import PLAN_LIST
 from .settings import PY3
-from .settings import User
 from .settings import ASK_FOR_CARD_IF_SUBSCRIPTION_IS_TRIAL
 from .settings import plan_from_stripe_id
 from .sync import sync_customer

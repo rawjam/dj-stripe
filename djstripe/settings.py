@@ -21,7 +21,7 @@ def get_user_model():
         from django.contrib.auth.models import User
     return User
 
-User = get_user_model()
+#User = get_user_model()
 
 
 def plan_from_stripe_id(stripe_id):
